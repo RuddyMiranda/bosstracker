@@ -1,0 +1,31 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "bossDeaths",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "guildId", "order": "ASCENDING" },
+        { "fieldPath": "bossId", "order": "ASCENDING" },
+        { "fieldPath": "killedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "bossDeaths",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "guildId", "order": "ASCENDING" },
+        { "fieldPath": "nextRespawnAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "devices",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "guildId", "order": "ASCENDING" },
+        { "fieldPath": "notificationsEnabled", "order": "ASCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}
+

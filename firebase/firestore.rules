@@ -1,0 +1,36 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() { return request.auth != null; }
+    function uid() { return request.auth.uid; }
+    
+    // App de una sola comunidad: sin guilds. Control de permisos por admins/{uid}.
+    function isAdmin() {
+      return isSignedIn() && exists(/databases/$(database)/documents/admins/$(uid()));
+    }
+
+    match /bosses/{bossId} {
+      allow read: if isSignedIn();
+      // Solo admins pueden crear/editar/borrar bosses.
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /bossDeaths/{deathId} {
+      // Cualquiera autenticado puede leer y registrar muertes.
+      allow read, create: if isSignedIn();
+      // Solo admins pueden editar/borrar registros.
+      allow update, delete: if isAdmin();
+    }
+
+    match /admins/{adminUid} {
+      // Los admins pueden comprobar su propio doc; nadie puede crear desde el cliente.
+      allow read: if isSignedIn() && adminUid == uid();
+      allow create, update, delete: if false;
+    }
+
+    match /devices/{deviceId} {
+      allow read, create, update, delete: if isSignedIn() && deviceId.matches('^' + uid() + '_.*$');
+    }
+  }
+}
+

@@ -1,0 +1,17 @@
+[build]
+  base = "apps/client"
+  publish = "build/web"
+  command = """
+    if [ ! -d \"$HOME/flutter\" ]; then
+      git clone https://github.com/flutter/flutter.git --depth 1 -b stable \"$HOME/flutter\"
+    fi
+    export PATH=\"$HOME/flutter/bin:$PATH\"
+    flutter config --enable-web
+    flutter pub get
+    flutter build web
+  """
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
