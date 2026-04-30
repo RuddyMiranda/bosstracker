@@ -21,6 +21,48 @@ _Pulse _pulseForBoss(BossDeath? latest, Duration expireGrace, DateTime now) {
   return _Pulse.green;
 }
 
+/// Orden de filas: primero los que faltan para respawn, luego ventana verde, al final gris.
+int _statusSortKey(_Pulse p) {
+  return switch (p) {
+    _Pulse.red => 0,
+    _Pulse.green => 1,
+    _Pulse.gray => 2,
+  };
+}
+
+int _compareBossesByStatus(
+  Boss a,
+  Boss b, {
+  required Map<String, BossDeath> latestByBoss,
+  required DateTime now,
+  required Duration expireGrace,
+}) {
+  final la = latestByBoss[a.id];
+  final lb = latestByBoss[b.id];
+  final pa = _pulseForBoss(la, expireGrace, now);
+  final pb = _pulseForBoss(lb, expireGrace, now);
+  final ka = _statusSortKey(pa);
+  final kb = _statusSortKey(pb);
+  if (ka != kb) return ka.compareTo(kb);
+
+  switch (pa) {
+    case _Pulse.red:
+      return la!.nextRespawnAt.compareTo(lb!.nextRespawnAt);
+    case _Pulse.green:
+      // Ventana termina en next + grace; primero la que se cierra antes.
+      final aEnd = la!.nextRespawnAt.add(expireGrace);
+      final bEnd = lb!.nextRespawnAt.add(expireGrace);
+      return aEnd.compareTo(bEnd);
+    case _Pulse.gray:
+      if (la == null && lb == null) {
+        return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+      }
+      if (la == null) return 1;
+      if (lb == null) return -1;
+      return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+  }
+}
+
 class _BossLedDot extends StatelessWidget {
   const _BossLedDot({required this.pulse});
 
@@ -46,8 +88,8 @@ class _BossLedDot extends StatelessWidget {
         shadows = null;
     }
     return SizedBox(
-      width: 12,
-      height: 12,
+      width: 10,
+      height: 10,
       child: DecoratedBox(
         decoration: BoxDecoration(
           shape: BoxShape.circle,
@@ -144,37 +186,56 @@ class _BossListPageState extends State<BossListPage> {
             }
             final nowForSort = DateTime.now();
             final sortedBosses = [...bosses]..sort((a, b) {
-              final aNext = latestByBoss[a.id]?.nextRespawnAt;
-              final bNext = latestByBoss[b.id]?.nextRespawnAt;
-
-              // Sin registro quedan al final.
-              if (aNext == null && bNext == null) {
-                return a.name.toLowerCase().compareTo(b.name.toLowerCase());
-              }
-              if (aNext == null) return 1;
-              if (bNext == null) return -1;
-
-              // Menor duración restante => más próximo en salir.
-              final aRemaining = aNext.difference(nowForSort);
-              final bRemaining = bNext.difference(nowForSort);
-              final cmp = aRemaining.compareTo(bRemaining);
-              if (cmp != 0) return cmp;
-              return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+              return _compareBossesByStatus(
+                a,
+                b,
+                latestByBoss: latestByBoss,
+                now: nowForSort,
+                expireGrace: expireGrace,
+              );
             });
+
+            // En Android/móvil nativo: celdas más bajas y tipografía un poco mayor
+            // (en web se mantiene el layout previo).
+            final isPhoneNative = !kIsWeb;
+            final theme = Theme.of(context);
 
             return LayoutBuilder(
               builder: (context, constraints) {
                 final usableWidth = constraints.maxWidth - (gutter * 2) - 24;
-                final minTileWidth = w < 600 ? 210.0 : 260.0;
+                final minTileWidth = isPhoneNative
+                    ? 158.0
+                    : (w < 600 ? 210.0 : 260.0);
                 final crossAxisCount =
                     (usableWidth / minTileWidth).floor().clamp(1, 6);
+                final childAspectRatio = isPhoneNative
+                    ? 2.75
+                    : (w < 600 ? 1.75 : 2.15);
+                final titleStyle = isPhoneNative
+                    ? theme.textTheme.titleSmall?.copyWith(
+                        fontSize: 15,
+                        height: 1.1,
+                        fontWeight: FontWeight.w600,
+                      )
+                    : theme.textTheme.titleSmall;
+                final subtitleStyle = isPhoneNative
+                    ? theme.textTheme.bodySmall?.copyWith(
+                        fontSize: 12.5,
+                        height: 1.15,
+                      )
+                    : theme.textTheme.bodySmall;
                 return GridView.builder(
-                  padding: EdgeInsets.fromLTRB(gutter + 12, 12, gutter + 12, 12),
+                  padding: EdgeInsets.fromLTRB(
+                    gutter + (isPhoneNative ? 8 : 12),
+                    isPhoneNative ? 8 : 12,
+                    gutter + (isPhoneNative ? 8 : 12),
+                    isPhoneNative ? 8 : 12,
+                  ),
                   gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: crossAxisCount,
-                    crossAxisSpacing: 8,
-                    mainAxisSpacing: 8,
-                    childAspectRatio: w < 600 ? 1.75 : 2.15,
+                    crossAxisSpacing: isPhoneNative ? 6 : 8,
+                    mainAxisSpacing: isPhoneNative ? 6 : 8,
+                    childAspectRatio: childAspectRatio,
                   ),
                   itemCount: sortedBosses.length,
                   itemBuilder: (context, i) {
@@ -200,13 +261,19 @@ class _BossListPageState extends State<BossListPage> {
                     final pulse = _pulseForBoss(latest, expireGrace, now);
 
                     return Card(
+                      margin: EdgeInsets.zero,
                       child: InkWell(
                         borderRadius: BorderRadius.circular(12),
                         onTap: () => context.go("/boss/${b.id}"),
                         child: Padding(
-                          padding: const EdgeInsets.all(8),
+                          padding: EdgeInsets.symmetric(
+                            horizontal: isPhoneNative ? 6 : 8,
+                            vertical: isPhoneNative ? 4 : 8,
+                          ),
                           child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
                             crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
                             children: [
                               Row(
                                 children: [
@@ -223,24 +290,27 @@ class _BossListPageState extends State<BossListPage> {
                                     },
                                     child: _BossLedDot(pulse: pulse),
                                   ),
-                                  const SizedBox(width: 8),
+                                  SizedBox(width: isPhoneNative ? 6 : 8),
                                   Expanded(
                                     child: Text(
                                       b.name,
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
-                                      style: Theme.of(context).textTheme.titleSmall,
+                                      style: titleStyle,
                                     ),
                                   ),
-                                  const Icon(Icons.chevron_right, size: 18),
+                                  Icon(
+                                    Icons.chevron_right,
+                                    size: isPhoneNative ? 16 : 18,
+                                  ),
                                 ],
                               ),
-                              const SizedBox(height: 4),
+                              SizedBox(height: isPhoneNative ? 1 : 4),
                               Text(
                                 "$subtitle · ${bossInstanceLabel(b)}",
-                                maxLines: 2,
+                                maxLines: isPhoneNative ? 1 : 2,
                                 overflow: TextOverflow.ellipsis,
-                                style: Theme.of(context).textTheme.bodySmall,
+                                style: subtitleStyle,
                               ),
                             ],
                           ),

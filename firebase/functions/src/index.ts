@@ -283,6 +283,21 @@ export const sendDueNotifications = onSchedule("every 1 minutes", async () => {
         data: {
           type: "boss_respawn_soon",
           bossIds: JSON.stringify(uniqueBossIds)
+        },
+        // Android: mismo channelId que [MainActivity] (sonido + prioridad).
+        android: {
+          priority: "high",
+          notification: {
+            sound: "default",
+            channelId: "boss_respawn_soon"
+          }
+        },
+        apns: {
+          payload: {
+            aps: {
+              sound: "default"
+            }
+          }
         }
       });
       totalSuccess += 1;
